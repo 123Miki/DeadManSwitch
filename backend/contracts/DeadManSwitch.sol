@@ -66,12 +66,14 @@ contract DeadManSwitch {
         if (msg.value == 0) revert NoFunds();
 
         uint256 fee = (msg.value * FEE_DEPOSIT_BPS) / 10000;
-        feeRecipient.transfer(fee);
-
         unchecked {
             emit Deposited(msg.sender, msg.value - fee);
         }
+        (bool ok,) = feeRecipient.call{value: fee}("");
+
+        if (!ok) revert TransferFailed();
     }
+
 
     function ping() external onlyOwner {
         uint96 ts = uint96(block.timestamp);        
@@ -84,13 +86,15 @@ contract DeadManSwitch {
         if (_newHeir == address(0)) revert ZeroAddress();
         if (msg.value < FEE_HEIR_CHANGE) revert InsufficientFee();
 
-        feeRecipient.transfer(msg.value);
-
         emit HeirChanged(heir, _newHeir);
 
         lastPing = uint96(block.timestamp);
         heir = _newHeir;
+        (bool ok,) = feeRecipient.call{value: msg.value}("");
+        
+        if (!ok) revert TransferFailed();
     }
+
 
     function setDelay(uint96 _newDelay) external onlyOwner {
         if (_newDelay < MIN_DELAY) revert InvalidDelay();

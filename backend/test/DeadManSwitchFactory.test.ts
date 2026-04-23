@@ -112,11 +112,26 @@ describe("DeadManSwitchFactory", function () {
             expect(await factory.switches(owner.address)).to.not.equal(await factory.switches(stranger.address));
         });
 
-        it("Should revert with AlreadyExists if owner already has a switch", async function () {
+        it("Should revert with AlreadyExists if owner already has a funded switch", async function () {
             await factory.connect(owner).createSwitch(heir.address, MIN_DELAY);
+            const switchAddress = await factory.switches(owner.address);
+            const deployedSwitch = await ethers.getContractAt("DeadManSwitch", switchAddress);
+            await deployedSwitch.deposit({ value: ethers.parseEther("1") });
             await expect(
                 factory.connect(owner).createSwitch(heir.address, MIN_DELAY)
             ).to.be.revertedWithCustomError(factory, "AlreadyExists");
+        });
+
+        it("Should allow recreation after all funds are claimed", async function () {
+            await factory.connect(owner).createSwitch(heir.address, MIN_DELAY);
+            const switchAddress = await factory.switches(owner.address);
+            const deployedSwitch = await ethers.getContractAt("DeadManSwitch", switchAddress);
+            await deployedSwitch.deposit({ value: ethers.parseEther("1") });
+            await networkHelpers.time.increase(MIN_DELAY + 1);
+            await deployedSwitch.connect(heir).claim();
+            await factory.connect(owner).createSwitch(heir.address, MIN_DELAY);
+            const newSwitchAddress = await factory.switches(owner.address);
+            expect(newSwitchAddress).to.not.equal(switchAddress);
         });
 
         it("Should revert with ZeroAddress if _heir is zero", async function () {
