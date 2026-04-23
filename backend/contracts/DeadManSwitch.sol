@@ -10,6 +10,8 @@ error InvalidDelay();
 error NotYetExpired();
 error NoFunds();
 error InsufficientFee();
+error NotHeir();
+error TransferFailed();
 
 contract DeadManSwitch {
     //-----------------------------------
@@ -65,13 +67,16 @@ contract DeadManSwitch {
         uint256 fee = (msg.value * FEE_DEPOSIT_BPS) / 10000;
         feeRecipient.transfer(fee);
 
-        emit Deposited(msg.sender, msg.value - fee);
+        unchecked {
+            emit Deposited(msg.sender, msg.value - fee);
+        }
     }
 
     function ping() external onlyOwner {
-        lastPing = uint96(block.timestamp);
+        uint96 ts = uint96(block.timestamp);        
+        lastPing = ts;
 
-        emit Pinged(msg.sender, uint96(block.timestamp));
+        emit Pinged(msg.sender, ts);
     }
 
     function setHeir(address payable _newHeir) external payable onlyOwner {
@@ -82,6 +87,7 @@ contract DeadManSwitch {
 
         emit HeirChanged(heir, _newHeir);
 
+        lastPing = uint96(block.timestamp);
         heir = _newHeir;
     }
 
@@ -90,7 +96,20 @@ contract DeadManSwitch {
 
         emit DelayChanged(inactivityDelay, _newDelay);
 
+        lastPing = uint96(block.timestamp);
         inactivityDelay = _newDelay;
     }
 
+    function claim() external {
+        if (msg.sender != heir) revert NotHeir();
+        if (block.timestamp < uint256(lastPing) + uint256(inactivityDelay)) revert NotYetExpired();
+
+        uint256 balance = address(this).balance;
+        if (balance == 0) revert NoFunds();
+
+        (bool success, ) = heir.call{value: balance}("");
+        if (!success) revert TransferFailed();
+
+        emit Claimed(msg.sender, balance);
+    }
 }
