@@ -46,12 +46,13 @@ contract DeadManSwitch {
     //-----------------------------------
     //-----CONSTRUCTOR-------------------
     //-----------------------------------
-    constructor(address payable _heir, uint96 _delay, address payable _feeRecipient) {
+    constructor(address _owner, address payable _heir, uint96 _delay, address payable _feeRecipient) {
+        if (_owner == address(0)) revert ZeroAddress();
         if (_heir == address(0)) revert ZeroAddress();
         if (_delay < MIN_DELAY) revert InvalidDelay();
         if (_feeRecipient == address(0)) revert ZeroAddress();
 
-        owner = msg.sender;
+        owner = _owner;
         heir = _heir;
         inactivityDelay = _delay;
         lastPing = uint96(block.timestamp);
