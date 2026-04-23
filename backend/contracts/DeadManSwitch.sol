@@ -22,7 +22,7 @@ contract DeadManSwitch {
     uint16 public constant FEE_DEPOSIT_BPS = 10;
     uint256 public constant FEE_HEIR_CHANGE = 0.001 ether;
     address payable public immutable feeRecipient;
-
+    uint96 public constant MIN_DELAY = 30 days;
 
     //-----------------------------------
     //-----EVENTS------------------------
@@ -46,7 +46,7 @@ contract DeadManSwitch {
     //-----------------------------------
     constructor(address payable _heir, uint96 _delay, address payable _feeRecipient) {
         if (_heir == address(0)) revert ZeroAddress();
-        if (_delay == 0) revert InvalidDelay();
+        if (_delay < MIN_DELAY) revert InvalidDelay();
         if (_feeRecipient == address(0)) revert ZeroAddress();
 
         owner = msg.sender;
@@ -68,6 +68,29 @@ contract DeadManSwitch {
         emit Deposited(msg.sender, msg.value - fee);
     }
 
+    function ping() external onlyOwner {
+        lastPing = uint96(block.timestamp);
 
+        emit Pinged(msg.sender, uint96(block.timestamp));
+    }
+
+    function setHeir(address payable _newHeir) external payable onlyOwner {
+        if (_newHeir == address(0)) revert ZeroAddress();
+        if (msg.value < FEE_HEIR_CHANGE) revert InsufficientFee();
+
+        feeRecipient.transfer(msg.value);
+
+        emit HeirChanged(heir, _newHeir);
+
+        heir = _newHeir;
+    }
+
+    function setDelay(uint96 _newDelay) external onlyOwner {
+        if (_newDelay < MIN_DELAY) revert InvalidDelay();
+
+        emit DelayChanged(inactivityDelay, _newDelay);
+
+        inactivityDelay = _newDelay;
+    }
 
 }
