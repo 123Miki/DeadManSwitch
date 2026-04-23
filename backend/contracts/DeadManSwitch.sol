@@ -9,6 +9,7 @@ error ZeroAddress();
 error InvalidDelay();
 error NotYetExpired();
 error NoFunds();
+error InsufficientFee();
 
 contract DeadManSwitch {
     //-----------------------------------
@@ -18,6 +19,10 @@ contract DeadManSwitch {
     uint96 public lastPing;
     address payable public heir;
     uint96 public inactivityDelay;
+    uint16 public constant FEE_DEPOSIT_BPS = 10;
+    uint256 public constant FEE_HEIR_CHANGE = 0.001 ether;
+    address payable public immutable feeRecipient;
+
 
     //-----------------------------------
     //-----EVENTS------------------------
@@ -35,6 +40,34 @@ contract DeadManSwitch {
         if (msg.sender != owner) revert NotOwner();
         _;
     }
+
+    //-----------------------------------
+    //-----CONSTRUCTOR-------------------
+    //-----------------------------------
+    constructor(address payable _heir, uint96 _delay, address payable _feeRecipient) {
+        if (_heir == address(0)) revert ZeroAddress();
+        if (_delay == 0) revert InvalidDelay();
+        if (_feeRecipient == address(0)) revert ZeroAddress();
+
+        owner = msg.sender;
+        heir = _heir;
+        inactivityDelay = _delay;
+        lastPing = uint96(block.timestamp);
+        feeRecipient = _feeRecipient;
+    }
+
+    //-----------------------------------
+    //-----FUNCTIONS---------------------
+    //-----------------------------------
+    function deposit() external payable {
+        if (msg.value == 0) revert NoFunds();
+
+        uint256 fee = (msg.value * FEE_DEPOSIT_BPS) / 10000;
+        feeRecipient.transfer(fee);
+
+        emit Deposited(msg.sender, msg.value - fee);
+    }
+
 
 
 }
