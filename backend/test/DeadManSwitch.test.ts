@@ -4,6 +4,7 @@ import { network } from "hardhat";
 const { ethers, networkHelpers } = await network.connect();
 
 const MIN_DELAY = 30 * 24 * 60 * 60;
+const MAX_DELAY = 1095 * 24 * 60 * 60;
 const FEE_HEIR_CHANGE = ethers.parseEther("0.001");
 const DEPOSIT_AMOUNT = ethers.parseEther("1");
 const DEPOSIT_FEE = DEPOSIT_AMOUNT * 10n / 10000n;
@@ -104,6 +105,12 @@ describe("DeadManSwitch", function () {
         it("Should revert with InvalidDelay if _delay < MIN_DELAY", async function () {
             await expect(
                 ethers.deployContract("DeadManSwitch", [owner.address, heir.address, MIN_DELAY - 1, feeRecipient.address], owner)
+            ).to.be.revertedWithCustomError(contract, "InvalidDelay");
+        });
+
+        it("Should revert with InvalidDelay if _delay > MAX_DELAY", async function () {
+            await expect(
+                ethers.deployContract("DeadManSwitch", [owner.address, heir.address, MAX_DELAY + 1, feeRecipient.address], owner)
             ).to.be.revertedWithCustomError(contract, "InvalidDelay");
         });
     });
@@ -229,10 +236,24 @@ describe("DeadManSwitch", function () {
             ).to.be.revertedWithCustomError(contract, "InsufficientFee");
         });
 
+        it("Should refund surplus fee to sender", async function () {
+            const overpay = FEE_HEIR_CHANGE + ethers.parseEther("0.5");
+            const before = await ethers.provider.getBalance(feeRecipient.address);
+            await contract.connect(owner).setHeir(stranger.address, { value: overpay });
+            const after = await ethers.provider.getBalance(feeRecipient.address);
+            expect(after - before).to.equal(FEE_HEIR_CHANGE);
+        });
+
         it("Should revert with NotOwner if not owner", async function () {
             await expect(
                 contract.connect(stranger).setHeir(stranger.address, { value: FEE_HEIR_CHANGE })
             ).to.be.revertedWithCustomError(contract, "NotOwner");
+        });
+
+        it("Should revert with SameHeir if _newHeir is current heir", async function () {
+            await expect(
+                contract.connect(owner).setHeir(heir.address, { value: FEE_HEIR_CHANGE })
+            ).to.be.revertedWithCustomError(contract, "SameHeir");
         });
     });
 
@@ -267,6 +288,12 @@ describe("DeadManSwitch", function () {
         it("Should revert with InvalidDelay if _newDelay < MIN_DELAY", async function () {
             await expect(
                 contract.connect(owner).setDelay(MIN_DELAY - 1)
+            ).to.be.revertedWithCustomError(contract, "InvalidDelay");
+        });
+
+        it("Should revert with InvalidDelay if _newDelay > MAX_DELAY", async function () {
+            await expect(
+                contract.connect(owner).setDelay(MAX_DELAY + 1)
             ).to.be.revertedWithCustomError(contract, "InvalidDelay");
         });
 

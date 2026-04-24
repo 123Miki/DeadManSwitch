@@ -7,7 +7,6 @@ import "./DeadManSwitch.sol";
 //-----ERRORS------------------------
 //-----------------------------------
 error AlreadyExists();
-error SwitchNotFound();
 
 contract DeadManSwitchFactory {
     //-----------------------------------

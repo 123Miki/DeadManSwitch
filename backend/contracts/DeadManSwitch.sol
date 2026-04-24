@@ -12,6 +12,7 @@ error NoFunds();
 error InsufficientFee();
 error NotHeir();
 error TransferFailed();
+error SameHeir();
 
 contract DeadManSwitch {
     //-----------------------------------
@@ -25,6 +26,7 @@ contract DeadManSwitch {
     uint256 public constant FEE_HEIR_CHANGE = 0.001 ether;
     address payable public immutable feeRecipient;
     uint96 public constant MIN_DELAY = 30 days;
+    uint96 public constant MAX_DELAY = 1095 days;
 
     //-----------------------------------
     //-----EVENTS------------------------
@@ -49,7 +51,7 @@ contract DeadManSwitch {
     constructor(address _owner, address payable _heir, uint96 _delay, address payable _feeRecipient) {
         if (_owner == address(0)) revert ZeroAddress();
         if (_heir == address(0)) revert ZeroAddress();
-        if (_delay < MIN_DELAY) revert InvalidDelay();
+        if (_delay < MIN_DELAY || _delay > MAX_DELAY) revert InvalidDelay();
         if (_feeRecipient == address(0)) revert ZeroAddress();
 
         owner = _owner;
@@ -85,19 +87,25 @@ contract DeadManSwitch {
     function setHeir(address payable _newHeir) external payable onlyOwner {
         if (_newHeir == address(0)) revert ZeroAddress();
         if (msg.value < FEE_HEIR_CHANGE) revert InsufficientFee();
+        if (_newHeir == heir) revert SameHeir();
 
         emit HeirChanged(heir, _newHeir);
 
         lastPing = uint96(block.timestamp);
         heir = _newHeir;
-        (bool ok,) = feeRecipient.call{value: msg.value}("");
-        
+        (bool ok,) = feeRecipient.call{value: FEE_HEIR_CHANGE}("");
+
         if (!ok) revert TransferFailed();
+        if (msg.value > FEE_HEIR_CHANGE) {
+            unchecked {
+                (bool refund,) = msg.sender.call{value: msg.value - FEE_HEIR_CHANGE}("");
+                if (!refund) revert TransferFailed();
+            }
+        }
     }
 
-
     function setDelay(uint96 _newDelay) external onlyOwner {
-        if (_newDelay < MIN_DELAY) revert InvalidDelay();
+        if (_newDelay < MIN_DELAY || _newDelay > MAX_DELAY) revert InvalidDelay();
 
         emit DelayChanged(inactivityDelay, _newDelay);
 
@@ -112,9 +120,9 @@ contract DeadManSwitch {
         uint256 balance = address(this).balance;
         if (balance == 0) revert NoFunds();
 
+        emit Claimed(msg.sender, balance);
+
         (bool success, ) = heir.call{value: balance}("");
         if (!success) revert TransferFailed();
-
-        emit Claimed(msg.sender, balance);
     }
 }
