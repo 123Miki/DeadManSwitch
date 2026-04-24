@@ -1,0 +1,43 @@
+{
+  "_format": "hh3-sol-build-info-1",
+  "id": "solc-0_8_28-97c7d9039ee94ca17402080cee59bc9fe8050e28",
+  "solcVersion": "0.8.28",
+  "solcLongVersion": "0.8.28+commit.7893614a",
+  "compilerType": "solc",
+  "userSourceNameMap": {
+    "contracts/DeadManSwitchFactory.sol": "project/contracts/DeadManSwitchFactory.sol"
+  },
+  "input": {
+    "language": "Solidity",
+    "settings": {
+      "evmVersion": "cancun",
+      "optimizer": {
+        "enabled": true,
+        "runs": 200
+      },
+      "outputSelection": {
+        "*": {
+          "": [
+            "ast"
+          ],
+          "*": [
+            "abi",
+            "evm.bytecode",
+            "evm.deployedBytecode",
+            "evm.methodIdentifiers",
+            "metadata"
+          ]
+        }
+      },
+      "remappings": []
+    },
+    "sources": {
+      "project/contracts/DeadManSwitch.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity 0.8.28;\r\n\r\n//-----------------------------------\r\n//-----ERRORS--------------------------\r\n//-----------------------------------\r\nerror NotOwner();\r\nerror ZeroAddress();\r\nerror InvalidDelay();\r\nerror NotYetExpired();\r\nerror NoFunds();\r\nerror InsufficientFee();\r\nerror NotHeir();\r\nerror TransferFailed();\r\nerror SameHeir();\r\n\r\ncontract DeadManSwitch {\r\n    //-----------------------------------\r\n    //-----STORAGE-----------------------\r\n    //-----------------------------------\r\n    address public owner;\r\n    uint96 public lastPing;\r\n    address payable public heir;\r\n    uint96 public inactivityDelay;\r\n    uint16 public constant FEE_DEPOSIT_BPS = 10;\r\n    uint256 public constant FEE_HEIR_CHANGE = 0.001 ether;\r\n    address payable public immutable feeRecipient;\r\n    uint96 public constant MIN_DELAY = 30 days;\r\n    uint96 public constant MAX_DELAY = 1095 days;\r\n\r\n    //-----------------------------------\r\n    //-----EVENTS------------------------\r\n    //-----------------------------------\r\n    event Deposited(address indexed owner, uint256 amount);\r\n    event Pinged(address indexed owner, uint96 timestamp);\r\n    event HeirChanged(address indexed oldHeir, address indexed newHeir);\r\n    event DelayChanged(uint96 oldDelay, uint96 newDelay);\r\n    event Claimed(address indexed heir, uint256 amount);\r\n\r\n    //-----------------------------------\r\n    //-----MODIFIERS---------------------\r\n    //-----------------------------------\r\n    modifier onlyOwner() {\r\n        if (msg.sender != owner) revert NotOwner();\r\n        _;\r\n    }\r\n\r\n    //-----------------------------------\r\n    //-----CONSTRUCTOR-------------------\r\n    //-----------------------------------\r\n    constructor(address _owner, address payable _heir, uint96 _delay, address payable _feeRecipient) {\r\n        if (_owner == address(0)) revert ZeroAddress();\r\n        if (_heir == address(0)) revert ZeroAddress();\r\n        if (_delay < MIN_DELAY || _delay > MAX_DELAY) revert InvalidDelay();\r\n        if (_feeRecipient == address(0)) revert ZeroAddress();\r\n\r\n        owner = _owner;\r\n        heir = _heir;\r\n        inactivityDelay = _delay;\r\n        lastPing = uint96(block.timestamp);\r\n        feeRecipient = _feeRecipient;\r\n    }\r\n\r\n    //-----------------------------------\r\n    //-----FUNCTIONS---------------------\r\n    //-----------------------------------\r\n    function deposit() external payable {\r\n        if (msg.value == 0) revert NoFunds();\r\n\r\n        uint256 fee = (msg.value * FEE_DEPOSIT_BPS) / 10000;\r\n        unchecked {\r\n            emit Deposited(msg.sender, msg.value - fee);\r\n        }\r\n        (bool ok,) = feeRecipient.call{value: fee}(\"\");\r\n\r\n        if (!ok) revert TransferFailed();\r\n    }\r\n\r\n\r\n    function ping() external onlyOwner {\r\n        uint96 ts = uint96(block.timestamp);        \r\n        lastPing = ts;\r\n\r\n        emit Pinged(msg.sender, ts);\r\n    }\r\n\r\n    function setHeir(address payable _newHeir) external payable onlyOwner {\r\n        if (_newHeir == address(0)) revert ZeroAddress();\r\n        if (msg.value < FEE_HEIR_CHANGE) revert InsufficientFee();\r\n        if (_newHeir == heir) revert SameHeir();\r\n\r\n        emit HeirChanged(heir, _newHeir);\r\n\r\n        lastPing = uint96(block.timestamp);\r\n        heir = _newHeir;\r\n        (bool ok,) = feeRecipient.call{value: FEE_HEIR_CHANGE}(\"\");\r\n\r\n        if (!ok) revert TransferFailed();\r\n        if (msg.value > FEE_HEIR_CHANGE) {\r\n            unchecked {\r\n                (bool refund,) = msg.sender.call{value: msg.value - FEE_HEIR_CHANGE}(\"\");\r\n                if (!refund) revert TransferFailed();\r\n            }\r\n        }\r\n    }\r\n\r\n    function setDelay(uint96 _newDelay) external onlyOwner {\r\n        if (_newDelay < MIN_DELAY || _newDelay > MAX_DELAY) revert InvalidDelay();\r\n\r\n        emit DelayChanged(inactivityDelay, _newDelay);\r\n\r\n        lastPing = uint96(block.timestamp);\r\n        inactivityDelay = _newDelay;\r\n    }\r\n\r\n    function claim() external {\r\n        if (msg.sender != heir) revert NotHeir();\r\n        if (block.timestamp < uint256(lastPing) + uint256(inactivityDelay)) revert NotYetExpired();\r\n\r\n        uint256 balance = address(this).balance;\r\n        if (balance == 0) revert NoFunds();\r\n\r\n        emit Claimed(msg.sender, balance);\r\n\r\n        (bool success, ) = heir.call{value: balance}(\"\");\r\n        if (!success) revert TransferFailed();\r\n    }\r\n}"
+      },
+      "project/contracts/DeadManSwitchFactory.sol": {
+        "content": "// SPDX-License-Identifier: MIT\r\npragma solidity 0.8.28;\r\n\r\nimport \"./DeadManSwitch.sol\";\r\n\r\n//-----------------------------------\r\n//-----ERRORS------------------------\r\n//-----------------------------------\r\nerror AlreadyExists();\r\n\r\ncontract DeadManSwitchFactory {\r\n    //-----------------------------------\r\n    //-----STORAGE-----------------------\r\n    //-----------------------------------\r\n    address payable public immutable feeRecipient;\r\n    mapping(address => address) public switches;\r\n\r\n    //-----------------------------------\r\n    //-----EVENTS------------------------\r\n    //-----------------------------------\r\n    event SwitchCreated(address indexed owner, address indexed switchAddress);\r\n\r\n    //-----------------------------------\r\n    //-----CONSTRUCTOR-------------------\r\n    //-----------------------------------\r\n    constructor(address payable _feeRecipient) {\r\n        if (_feeRecipient == address(0)) revert ZeroAddress();\r\n\r\n        feeRecipient = _feeRecipient;\r\n    }\r\n\r\n    //-----------------------------------\r\n    //-----FUNCTIONS---------------------\r\n    //-----------------------------------\r\n    function createSwitch(address payable _heir, uint96 _delay) external returns (address) {\r\n        address existing = switches[msg.sender];\r\n        if (existing != address(0) && address(existing).balance > 0) revert AlreadyExists();\r\n\r\n        DeadManSwitch newSwitch = new DeadManSwitch(msg.sender, _heir, _delay, feeRecipient);\r\n        switches[msg.sender] = address(newSwitch);\r\n\r\n        emit SwitchCreated(msg.sender, address(newSwitch));\r\n\r\n        return address(newSwitch);\r\n    }\r\n}\r\n"
+      }
+    }
+  }
+}
